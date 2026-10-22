@@ -1,0 +1,22 @@
+{
+  "name": "dnake-simulator",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "tauri": "tauri",
+    "enroll": "node scripts/enroll.mjs",
+    "check-in": "node scripts/check-in.mjs"
+  },
+  "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
+    "@tauri-apps/api": "^2.12.4"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.3",
+    "vite": "^7.3.7"
+  }
+}
