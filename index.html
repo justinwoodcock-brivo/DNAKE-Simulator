@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DNAKE Simulator</title>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="rail" aria-label="Configuration">
+        <header class="brand">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="9" cy="12" r="2.2" fill="currentColor"/><path d="M14 8a5.5 5.5 0 0 1 0 8M17.5 5a10 10 0 0 1 0 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <div>
+            <h1>DNAKE Simulator</h1>
+            <p>Fake a door station</p>
+          </div>
+        </header>
+
+        <form id="config" autocomplete="off" spellcheck="false">
+          <section>
+            <h2>Connection</h2>
+            <div class="seg" role="radiogroup" aria-label="Environment" id="env-select">
+              <button type="button" role="radio" data-env="local">LOCAL</button>
+              <button type="button" role="radio" data-env="int">INT</button>
+              <button type="button" role="radio" data-env="qa">QA</button>
+            </div>
+            <p class="hint" id="env-note" hidden></p>
+            <label>Base URL
+              <input data-key="baseUrl" placeholder="http://localhost:3030" />
+            </label>
+          </section>
+
+          <section>
+            <h2>Device</h2>
+            <label>MAC address
+              <span class="with-action wrap">
+                <input data-key="mac" placeholder="AA:BB:CC:DD:EE:FF" />
+                <button type="button" class="ghost" id="copy-mac">Copy</button>
+                <button type="button" class="ghost" id="gen-mac">Generate</button>
+              </span>
+            </label>
+            <label>Serial number <span class="optional">optional</span>
+              <span class="with-action">
+                <input data-key="serialNumber" />
+                <button type="button" class="ghost" id="gen-serial">Generate</button>
+              </span>
+            </label>
+            <label>Secret
+              <span class="with-action wrap">
+                <input data-key="secret" placeholder="Set when enrolled" />
+                <button type="button" class="ghost" id="gen-secret">Generate</button>
+                <button type="button" class="ghost" id="clear-secret">Clear</button>
+              </span>
+            </label>
+          </section>
+
+          <details>
+            <summary>Reported on check-in</summary>
+            <label>Firmware version
+              <input data-key="firmwareVersion" placeholder="1.0.0" />
+            </label>
+            <label>Addressing
+              <select data-key="network.isDhcp">
+                <option value="">Not reported</option>
+                <option value="true">DHCP</option>
+                <option value="false">Static</option>
+              </select>
+            </label>
+            <label>IP address
+              <input data-key="network.ipAddress" placeholder="192.168.1.50" />
+            </label>
+            <label>Subnet mask
+              <input data-key="network.subnetMask" placeholder="255.255.255.0" />
+            </label>
+            <label>Gateway
+              <input data-key="network.gateway" placeholder="192.168.1.1" />
+            </label>
+          </details>
+
+          <details>
+            <summary>Requests</summary>
+            <label>Enroll path
+              <input data-key="enroll.path" />
+            </label>
+            <label>Check-in path
+              <input data-key="checkIn.path" />
+            </label>
+            <p class="hint">Use <code>{{mac}}</code> or your own variables in paths and header values.</p>
+            <div class="rows-head"><span>Extra headers</span><button type="button" class="ghost" data-add="headers">Add</button></div>
+            <div class="rows" id="rows-headers"></div>
+            <div class="rows-head"><span>Variables</span><button type="button" class="ghost" data-add="vars">Add</button></div>
+            <div class="rows" id="rows-vars"></div>
+          </details>
+        </form>
+      </aside>
+
+      <main class="work">
+        <ol class="flow" aria-label="Device flow">
+          <li id="flow-enroll"><span class="dot"></span><span>Enroll</span><small id="flow-enroll-note">Not yet</small></li>
+          <li id="flow-claim"><span class="dot"></span><span>Claim in onairplus</span><small id="flow-claim-note">Add device</small></li>
+          <li id="flow-checkin"><span class="dot"></span><span>Check in</span><small id="flow-checkin-note">Not started</small></li>
+        </ol>
+
+        <nav class="tabs" role="tablist">
+          <button role="tab" id="tab-enroll" aria-selected="true" data-tab="enroll">Enroll</button>
+          <button role="tab" id="tab-checkIn" aria-selected="false" data-tab="checkIn">Check in</button>
+          <button role="tab" id="tab-devices" aria-selected="false" data-tab="devices">Devices</button>
+        </nav>
+
+        <div class="stage">
+          <section class="view" id="view-enroll" role="tabpanel" aria-labelledby="tab-enroll">
+            <div class="action-bar">
+              <p>Registers the unit by MAC, as it would on first boot. The secret in the response is saved for check-in.</p>
+              <button class="primary" id="btn-enroll">Enroll unit</button>
+            </div>
+            <div id="enroll-result"></div>
+          </section>
+
+          <section class="view" id="view-checkIn" role="tabpanel" aria-labelledby="tab-checkIn" hidden>
+            <div class="action-bar">
+              <p>Checks in on an interval and highlights settings that changed. It reads PENDING until the unit is claimed.</p>
+              <label class="interval">Every
+                <input type="number" min="1" data-key="intervalSec" /> s
+              </label>
+              <button class="primary" id="btn-poll">Start checking in</button>
+            </div>
+            <div class="poll-grid">
+              <div>
+                <h3>Current settings</h3>
+                <div id="settings"></div>
+              </div>
+              <div>
+                <h3>Activity</h3>
+                <ol id="feed" class="feed"></ol>
+              </div>
+            </div>
+          </section>
+
+          <section class="view" id="view-devices" role="tabpanel" aria-labelledby="tab-devices" hidden>
+            <div class="action-bar">
+              <p>Every unit enrolled from this app. Import accounts with an admin token to fill in the account, site and name of claimed units.</p>
+            </div>
+            <div class="import">
+              <div class="import-grid">
+                <label>GraphQL URL
+                  <input data-key="graphqlUrl" />
+                </label>
+                <label>Admin token
+                  <input data-key="adminToken" type="password" placeholder="Paste the Authorization token from onairplus" />
+                </label>
+                <button class="ghost" id="btn-import">Import accounts</button>
+              </div>
+              <p class="hint" id="import-note">Reads the account from the token, then lists that account's claimed units from bred-api-ext and matches them by MAC.</p>
+            </div>
+            <div id="devices-list"></div>
+          </section>
+
+          <section class="curl" aria-label="curl export">
+            <div class="curl-head">
+              <h3>curl</h3>
+              <label class="check"><input type="checkbox" id="redact" checked /> Use $DNAKE_SECRET instead of the secret</label>
+              <span class="spacer"></span>
+              <button class="ghost" id="copy-curl">Copy</button>
+              <button class="ghost" id="copy-all">Copy both as script</button>
+            </div>
+            <pre id="curl-out"></pre>
+          </section>
+        </div>
+      </main>
+    </div>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
