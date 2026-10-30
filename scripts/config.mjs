@@ -32,6 +32,7 @@ Each option falls back to an env var; flags win.
 
   --env <name>              DNAKE_ENV               local | int | qa (default local), sets the base URL
   --base-url <url>          DNAKE_BASE_URL          overrides the environment's URL
+  --secret <value>          DNAKE_SECRET            required, the secret every unit sends (/access/INTERCOM_UNIT_SECRETS)
   --mac <address>           DNAKE_MAC
   --serial-number <value>   DNAKE_SERIAL_NUMBER     optional
   --firmware-version <v>    DNAKE_FIRMWARE_VERSION  optional, reported on check-in
@@ -39,7 +40,6 @@ Each option falls back to an env var; flags win.
   --ip-address <ip>         DNAKE_IP_ADDRESS        optional, reported on check-in
   --subnet-mask <ip>        DNAKE_SUBNET_MASK       optional, reported on check-in
   --gateway <ip>            DNAKE_GATEWAY           optional, reported on check-in
-  --secret <value>          DNAKE_SECRET            returned by enroll, needed to check in
   --enroll-path <path>      DNAKE_ENROLL_PATH
   --check-in-path <path>    DNAKE_CHECK_IN_PATH
   --header "Name: value"    repeatable              extra request header
