@@ -7,8 +7,8 @@ if (help) {
   process.exit(0);
 }
 
-if (!config.mac) {
-  console.error('A MAC address is required (--mac or DNAKE_MAC)');
+if (!config.mac || !config.secret) {
+  console.error('A MAC address and the secret are required (--mac/DNAKE_MAC, --secret/DNAKE_SECRET)');
   process.exit(2);
 }
 const req = buildRequest(config, 'enroll');
@@ -36,8 +36,8 @@ try {
   } catch {
     console.log(text);
   }
+  if (res.status === 401) console.error('\nSecret rejected. Check the secret for this environment.');
   if (res.status === 409) console.error('\nAlready claimed. De-register the unit in Access before it can enroll again.');
-  if (json?.secret) console.log(`\nexport DNAKE_SECRET=${json.secret}`);
   process.exit(res.ok ? 0 : 1);
 } catch (err) {
   console.error(`Request failed: ${err.cause?.message || err.cause?.code || err.message}`);

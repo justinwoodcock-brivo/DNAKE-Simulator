@@ -28,6 +28,9 @@
             <label>Base URL
               <input data-key="baseUrl" placeholder="http://localhost:3030" />
             </label>
+            <label>Secret
+              <input data-key="secret" type="password" placeholder="Shared by every unit in this environment" />
+            </label>
           </section>
 
           <section>
@@ -43,13 +46,6 @@
               <span class="with-action">
                 <input data-key="serialNumber" />
                 <button type="button" class="ghost" id="gen-serial">Generate</button>
-              </span>
-            </label>
-            <label>Secret
-              <span class="with-action wrap">
-                <input data-key="secret" placeholder="Set when enrolled" />
-                <button type="button" class="ghost" id="gen-secret">Generate</button>
-                <button type="button" class="ghost" id="clear-secret">Clear</button>
               </span>
             </label>
           </section>
@@ -110,7 +106,7 @@
         <div class="stage">
           <section class="view" id="view-enroll" role="tabpanel" aria-labelledby="tab-enroll">
             <div class="action-bar">
-              <p>Registers the unit by MAC, as it would on first boot. The secret in the response is saved for check-in.</p>
+              <p>Registers the unit by MAC, as it would on first boot.</p>
               <button class="primary" id="btn-enroll">Enroll unit</button>
             </div>
             <div id="enroll-result"></div>

@@ -14,7 +14,7 @@ if (help) {
 }
 
 if (!config.mac || !config.secret) {
-  console.error('A MAC address and the enroll secret are required (--mac/DNAKE_MAC, --secret/DNAKE_SECRET)');
+  console.error('A MAC address and the secret are required (--mac/DNAKE_MAC, --secret/DNAKE_SECRET)');
   process.exit(2);
 }
 const req = buildRequest(config, 'checkIn');
@@ -48,7 +48,7 @@ async function checkIn() {
       return;
     }
     if (res.status === 401) {
-      console.log(`${stamp()}  401 (${ms}ms)  secret rejected. A newer enroll replaces the old secret.`);
+      console.log(`${stamp()}  401 (${ms}ms)  secret rejected. Check the secret for this environment.`);
       stop(1);
       return;
     }

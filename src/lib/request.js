@@ -1,24 +1,23 @@
-export const SECRET_HEADER = 'x-intercom-unit-secret';
 export const SECRET_ENV_VAR = '$DNAKE_SECRET';
 
 export const ENVIRONMENTS = {
   local: { label: 'LOCAL', baseUrl: 'http://localhost:3030', graphqlUrl: 'http://localhost:20002/graphql' },
-  int: { label: 'INT', baseUrl: 'https://api.int.brivo.com', graphqlUrl: 'https://access-gql.int.brivo.com/graphql' },
-  qa: { label: 'QA', baseUrl: 'https://api-qa.brivo.com', graphqlUrl: 'https://access-gql.qa.brivo.com/graphql' },
+  int: { label: 'INT', baseUrl: 'https://access-api.int.brivo.com', graphqlUrl: 'https://access-gql.int.brivo.com/graphql' },
+  qa: { label: 'QA', baseUrl: 'https://access-api.qa.brivo.com', graphqlUrl: 'https://access-gql.qa.brivo.com/graphql' },
 };
 
 const environmentSettings = () =>
-  Object.fromEntries(Object.entries(ENVIRONMENTS).map(([key, env]) => [key, { baseUrl: env.baseUrl, graphqlUrl: env.graphqlUrl, adminToken: '' }]));
+  Object.fromEntries(Object.entries(ENVIRONMENTS).map(([key, env]) => [key, { baseUrl: env.baseUrl, secret: '', graphqlUrl: env.graphqlUrl, adminToken: '' }]));
 
 export const defaultConfig = () => ({
   environment: 'local',
   envs: environmentSettings(),
   baseUrl: ENVIRONMENTS.local.baseUrl,
+  secret: '',
   mac: '',
   serialNumber: '',
   firmwareVersion: '',
   network: { isDhcp: '', ipAddress: '', subnetMask: '', gateway: '' },
-  secret: '',
   graphqlUrl: ENVIRONMENTS.local.graphqlUrl,
   adminToken: '',
   intervalSec: 60,
@@ -75,10 +74,8 @@ export function buildRequest(config, kind, { redact = false } = {}) {
   const headers = [
     { name: 'Accept', value: 'application/json' },
     { name: 'Content-Type', value: 'application/json' },
+    { name: 'Authorization', value: `Bearer ${redact ? SECRET_ENV_VAR : config.secret.trim()}`, shell: redact },
   ];
-  if (kind === 'checkIn') {
-    headers.push({ name: SECRET_HEADER, value: redact ? SECRET_ENV_VAR : config.secret, shell: redact });
-  }
   for (const { k, v } of config.headers) if (k) headers.push({ name: k, value: render(v, vars) });
 
   const base = config.baseUrl.trim().replace(/\/+$/, '');
@@ -103,11 +100,12 @@ export function curlScript(config, { redact = true } = {}) {
     '#!/usr/bin/env bash',
     'set -euo pipefail',
     '',
-    '# 1. Enroll the unit. The response contains the secret, shown once. Export it as DNAKE_SECRET.',
+    redact ? '# export DNAKE_SECRET=<the secret in /access/INTERCOM_UNIT_SECRETS for this environment>' : '',
+    '',
+    '# 1. Enroll the unit.',
     toCurl(buildRequest(config, 'enroll', { redact })),
     '',
     '# 2. Claim the unit in onairplus (Add device), then check in. Repeat on an interval to mimic the unit.',
-    redact ? '# export DNAKE_SECRET=<secret from step 1>' : '',
     toCurl(buildRequest(config, 'checkIn', { redact })),
     '',
   ].join('\n');

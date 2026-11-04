@@ -24,12 +24,17 @@ function loadConfig() {
 
 const config = loadConfig();
 const save = () => {
-  const { baseUrl, graphqlUrl, adminToken } = config;
-  config.envs[config.environment] = { baseUrl, graphqlUrl, adminToken };
+  const { baseUrl, secret, graphqlUrl, adminToken } = config;
+  config.envs[config.environment] = { baseUrl, secret, graphqlUrl, adminToken };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
   } catch {}
 };
+
+// The field wins; a blank field falls back to DNAKE_SECRET from .env, which vite.config.js exposes to `npm run dev` only.
+const ENV_SECRET = import.meta.env.DNAKE_SECRET?.trim() ?? '';
+const currentSecret = () => config.secret.trim() || ENV_SECRET;
+const requestConfig = () => ({ ...config, secret: currentSecret() });
 
 const getPath = (path) => path.split('.').reduce((o, k) => o[k], config);
 const setPath = (path, value) => {
@@ -49,7 +54,7 @@ function recordDevice(mac, patch) {
   if (!key) return;
   let device = devices.find((d) => inEnv(d) && d.mac === key);
   if (!device) {
-    device = { env: config.environment, mac: key, serialNumber: '', secret: '', account: '', state: 'enrolled', enrolledAt: null, lastCheckInAt: null, settings: null };
+    device = { env: config.environment, mac: key, serialNumber: '', account: '', state: 'enrolled', enrolledAt: null, lastCheckInAt: null, settings: null };
     devices.unshift(device);
   }
   Object.assign(device, patch);
@@ -209,7 +214,7 @@ async function copy(text, label) {
 function renderCurl() {
   if (activeTab === 'devices') return;
   const redact = $('#redact').checked;
-  $('#curl-out').textContent = toCurl(buildRequest(config, activeTab, { redact }));
+  $('#curl-out').textContent = toCurl(buildRequest(requestConfig(), activeTab, { redact }));
 }
 
 async function send(req) {
@@ -229,10 +234,10 @@ async function send(req) {
   };
 }
 
-function problems(req, { needSecret = false } = {}) {
+function problems(req) {
   if (!config.baseUrl.trim()) return 'Enter a base URL.';
+  if (!currentSecret()) return 'Enter the secret for this environment, or set DNAKE_SECRET in .env.';
   if (!config.mac.trim()) return 'Enter a MAC address, or generate one.';
-  if (needSecret && !config.secret.trim()) return 'Enroll the unit first. Check-in needs the secret it returns.';
   const missing = unresolved(req.url, ...req.headers.map((h) => h.value));
   if (missing.length) return `Fill in ${missing.map((m) => `{{${m}}}`).join(', ')} before sending.`;
   return null;
@@ -263,8 +268,12 @@ function setNote(id, text, state) {
   $(`#flow-${id}-note`).textContent = text;
 }
 
+const currentDevice = () => devices.find((d) => inEnv(d) && d.mac === normalizeMac(config.mac));
+
 function renderFlow() {
-  setNote('enroll', config.secret ? 'Secret saved' : 'Not yet', config.secret ? 'done' : 'idle');
+  const state = currentDevice()?.state;
+  const enrolled = state != null && state !== 'removed' && state !== 'deregistered';
+  setNote('enroll', enrolled ? 'Enrolled' : 'Not yet', enrolled ? 'done' : 'idle');
   if (poll.lastState === 'REGISTERED') setNote('claim', 'Claimed', 'done');
   else if (poll.lastState === 'PENDING') setNote('claim', 'Waiting for Add device', 'active');
   else setNote('claim', 'Add device', 'idle');
@@ -273,6 +282,7 @@ function renderFlow() {
 }
 
 const enrollHint = {
+  401: 'The secret was rejected. Check the secret for this environment.',
   400: 'The API rejected the request. Check the MAC address and serial number.',
   409: 'This unit is already claimed. De-register it in Access before it can enroll again.',
 };
@@ -280,7 +290,7 @@ const enrollHint = {
 async function enroll() {
   const out = $('#enroll-result');
   const btn = $('#btn-enroll');
-  const req = buildRequest(config, 'enroll');
+  const req = buildRequest(requestConfig(), 'enroll');
   const issue = problems(req);
   if (issue) {
     out.innerHTML = `<div class="result"><p class="error">${esc(issue)}</p></div>`;
@@ -292,15 +302,12 @@ async function enroll() {
     const res = await send(req);
     const json = parseJson(res.body);
     let extra = '';
-    if (res.status < 300 && json?.secret) {
-      config.secret = json.secret;
-      if (json.pollIntervalSeconds) config.intervalSec = json.pollIntervalSeconds;
-      $('[data-key="secret"]').value = config.secret;
+    if (res.status < 300) {
+      if (json?.pollIntervalSeconds) config.intervalSec = json.pollIntervalSeconds;
       $('[data-key="intervalSec"]').value = config.intervalSec;
       save();
       recordDevice(config.mac, {
         serialNumber: config.serialNumber.trim(),
-        secret: config.secret,
         state: 'enrolled',
         enrolledAt: new Date().toISOString(),
         lastCheckInAt: null,
@@ -308,7 +315,7 @@ async function enroll() {
       });
       renderCurl();
       renderFlow();
-      extra = `<p class="next">Saved as this unit's secret. Claim it in onairplus (Add device), then start checking in.</p>`;
+      extra = `<p class="next">Enrolled. Claim it in onairplus (Add device), then start checking in.</p>`;
     } else if (enrollHint[res.status]) {
       extra = `<p class="error">${esc(enrollHint[res.status])}</p>`;
     }
@@ -363,7 +370,7 @@ async function checkInOnce() {
   if (poll.busy) return;
   poll.busy = true;
   try {
-    const res = await send(buildRequest(config, 'checkIn'));
+    const res = await send(buildRequest(requestConfig(), 'checkIn'));
     if (res.status === 410) {
       recordDevice(config.mac, { state: 'removed' });
       pushFeed({ error: '410. The unit is not registered. Enroll it again.' });
@@ -371,7 +378,7 @@ async function checkInOnce() {
       return;
     }
     if (res.status === 401) {
-      pushFeed({ error: '401. The secret was rejected. A newer enroll replaces the old secret.' });
+      pushFeed({ error: '401. The secret was rejected. Check the secret for this environment.' });
       setPolling(false);
       return;
     }
@@ -415,7 +422,7 @@ function setPolling(on) {
   clearInterval(poll.timer);
   poll.timer = null;
   if (on) {
-    const issue = problems(buildRequest(config, 'checkIn'), { needSecret: true });
+    const issue = problems(buildRequest(requestConfig(), 'checkIn'));
     if (issue) {
       pushFeed({ error: issue });
       return;
@@ -456,7 +463,7 @@ $('#btn-enroll').addEventListener('click', enroll);
 $('#btn-poll').addEventListener('click', () => setPolling(!poll.timer));
 $('#redact').addEventListener('change', renderCurl);
 $('#copy-curl').addEventListener('click', () => copy($('#curl-out').textContent, 'curl'));
-$('#copy-all').addEventListener('click', () => copy(curlScript(config, { redact: $('#redact').checked }), 'Script'));
+$('#copy-all').addEventListener('click', () => copy(curlScript(requestConfig(), { redact: $('#redact').checked }), 'Script'));
 $('#config').addEventListener('input', renderFlow);
 $('#gen-mac').addEventListener('click', () => {
   config.mac = randomMac();
@@ -472,23 +479,6 @@ $('#gen-serial').addEventListener('click', () => {
   $('[data-key="serialNumber"]').value = config.serialNumber;
   save();
   renderCurl();
-});
-
-const randomSecret = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, '0')).join('');
-
-$('#gen-secret').addEventListener('click', () => {
-  config.secret = randomSecret();
-  $('[data-key="secret"]').value = config.secret;
-  save();
-  renderCurl();
-  renderFlow();
-});
-$('#clear-secret').addEventListener('click', () => {
-  config.secret = '';
-  $('[data-key="secret"]').value = '';
-  save();
-  renderCurl();
-  renderFlow();
 });
 
 renderDevices();
@@ -518,8 +508,8 @@ $('#devices-list').addEventListener('click', (e) => {
   if (use) {
     const device = devices.find((d) => inEnv(d) && d.mac === use);
     if (poll.timer) setPolling(false);
-    Object.assign(config, { mac: device.mac, serialNumber: device.serialNumber, secret: device.secret });
-    for (const key of ['mac', 'serialNumber', 'secret']) $(`[data-key="${key}"]`).value = config[key];
+    Object.assign(config, { mac: device.mac, serialNumber: device.serialNumber });
+    for (const key of ['mac', 'serialNumber']) $(`[data-key="${key}"]`).value = config[key];
     poll.previous = null;
     poll.lastState = null;
     save();
@@ -604,13 +594,9 @@ async function deregisterUnit(mac) {
   importNote(`De-registering ${mac}…`);
   try {
     await gql(DEREGISTER_MUTATION, { deviceId: Number(device.deviceId) });
-    recordDevice(mac, { state: 'deregistered', deviceId: '', secret: '', settings: null });
+    recordDevice(mac, { state: 'deregistered', deviceId: '', settings: null });
     if (normalizeMac(config.mac) === mac) {
       if (poll.timer) setPolling(false);
-      config.secret = '';
-      $('[data-key="secret"]').value = '';
-      save();
-      renderCurl();
       renderFlow();
     }
     importNote(`De-registered ${mac}. Its next check-in gets a 410 and it can enroll again.`);
@@ -637,8 +623,6 @@ function setEnvironment(name) {
   save();
   config.environment = name;
   Object.assign(config, config.envs[name]);
-  const device = devices.find((d) => inEnv(d) && d.mac === normalizeMac(config.mac));
-  config.secret = device?.secret ?? '';
   poll.previous = null;
   poll.lastState = null;
   poll.feed = [];
