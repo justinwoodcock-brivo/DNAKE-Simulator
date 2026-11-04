@@ -2,8 +2,8 @@ export const SECRET_ENV_VAR = '$DNAKE_SECRET';
 
 export const ENVIRONMENTS = {
   local: { label: 'LOCAL', baseUrl: 'http://localhost:3030', graphqlUrl: 'http://localhost:20002/graphql' },
-  int: { label: 'INT', baseUrl: 'https://api.int.brivo.com', graphqlUrl: 'https://access-gql.int.brivo.com/graphql' },
-  qa: { label: 'QA', baseUrl: 'https://api-qa.brivo.com', graphqlUrl: 'https://access-gql.qa.brivo.com/graphql' },
+  int: { label: 'INT', baseUrl: 'https://access-api.int.brivo.com', graphqlUrl: 'https://access-gql.int.brivo.com/graphql' },
+  qa: { label: 'QA', baseUrl: 'https://access-api.qa.brivo.com', graphqlUrl: 'https://access-gql.qa.brivo.com/graphql' },
 };
 
 const environmentSettings = () =>

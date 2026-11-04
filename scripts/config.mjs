@@ -55,7 +55,15 @@ export function loadConfig(argv = process.argv.slice(2)) {
   const config = defaultConfig();
   const environment = pick('env', 'DNAKE_ENV') ?? 'local';
   if (!ENVIRONMENTS[environment]) throw new Error(`Unknown environment "${environment}". Use local, int or qa.`);
-  config.baseUrl = pick('base-url', 'DNAKE_BASE_URL') ?? ENVIRONMENTS[environment].baseUrl;
+  if (values['base-url']) {
+    config.baseUrl = values['base-url'];
+  } else if (values.env) {
+    config.baseUrl = ENVIRONMENTS[environment].baseUrl;
+  } else if (env.DNAKE_BASE_URL) {
+    config.baseUrl = env.DNAKE_BASE_URL;
+  } else {
+    config.baseUrl = ENVIRONMENTS[environment].baseUrl;
+  }
   config.mac = pick('mac', 'DNAKE_MAC') ?? '';
   config.serialNumber = pick('serial-number', 'DNAKE_SERIAL_NUMBER') ?? '';
   config.firmwareVersion = pick('firmware-version', 'DNAKE_FIRMWARE_VERSION') ?? '';
