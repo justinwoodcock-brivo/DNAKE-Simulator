@@ -193,9 +193,6 @@ button:disabled { opacity: 0.55; cursor: progress; }
 .with-action.wrap input { flex-basis: 100%; }
 .with-action.wrap button { margin-top: 0; }
 
-.import-grid { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(220px, 2fr) auto; gap: 10px; align-items: end; max-width: 900px; }
-.import-grid label { margin: 0; }
-.import-grid button { height: 36px; }
 .import .hint { margin: 8px 0 0; }
 .import .hint.error { color: var(--bad); }
 #devices-list { margin-top: 4px; }
@@ -231,3 +228,12 @@ button.danger:hover { filter: brightness(1.08); }
 @media (max-width: 1100px) { .detail-grid { grid-template-columns: 1fr; gap: 16px; } }
 
 #devices-list { overflow-x: auto; }
+
+.poll-grid h3.sub { margin-top: 22px; }
+.tamper { padding: 4px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 8px; }
+.feed .note span { grid-column: 2 / 4; color: var(--flash); }
+.tamper-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 0; }
+.tamper-row + .tamper-row { border-top: 1px solid var(--line); }
+.tamper-label { width: 76px; color: var(--muted); font-size: 12.5px; }
+.tamper .spacer { flex: 1; }
+#tamper-note.error { color: var(--bad); }

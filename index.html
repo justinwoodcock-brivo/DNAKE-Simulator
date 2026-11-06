@@ -34,6 +34,17 @@
           </section>
 
           <section>
+            <h2>Admin</h2>
+            <label>Admin token
+              <input data-key="adminToken" type="password" placeholder="Paste the Authorization token from onairplus" />
+            </label>
+            <label>GraphQL URL
+              <input data-key="graphqlUrl" />
+            </label>
+            <p class="hint">Acts as an admin of the token's account: import units, de-register, clear tamper.</p>
+          </section>
+
+          <section>
             <h2>Device</h2>
             <label>MAC address
               <span class="with-action wrap">
@@ -124,6 +135,24 @@
               <div>
                 <h3>Current settings</h3>
                 <div id="settings"></div>
+                <h3 class="sub">Tamper</h3>
+                <div class="tamper">
+                  <div class="tamper-row">
+                    <span class="tamper-label">Unit switch</span>
+                    <span class="pill" id="tamper-state"></span>
+                    <span class="spacer"></span>
+                    <button class="ghost" id="btn-tamper"></button>
+                  </div>
+                  <div class="tamper-row">
+                    <span class="tamper-label">Server</span>
+                    <span class="pill idle" id="tamper-server">Unknown</span>
+                    <small class="muted" id="tamper-server-at"></small>
+                    <span class="spacer"></span>
+                    <button class="ghost" id="btn-refresh-tamper">Refresh</button>
+                    <button class="ghost" id="btn-clear-tamper">Clear tamper as admin</button>
+                  </div>
+                </div>
+                <p class="hint" id="tamper-note">Once tripped, the unit reports it on every check-in until the server answers with <code>clearTamperSwitch</code>, which happens after an admin clears the tamper.</p>
               </div>
               <div>
                 <h3>Activity</h3>
@@ -134,18 +163,10 @@
 
           <section class="view" id="view-devices" role="tabpanel" aria-labelledby="tab-devices" hidden>
             <div class="action-bar">
-              <p>Every unit enrolled from this app. Import accounts with an admin token to fill in the account, site and name of claimed units.</p>
+              <p>Every unit enrolled from this app. Import accounts with the admin token in the sidebar to fill in the account, site and name of claimed units.</p>
             </div>
             <div class="import">
-              <div class="import-grid">
-                <label>GraphQL URL
-                  <input data-key="graphqlUrl" />
-                </label>
-                <label>Admin token
-                  <input data-key="adminToken" type="password" placeholder="Paste the Authorization token from onairplus" />
-                </label>
-                <button class="ghost" id="btn-import">Import accounts</button>
-              </div>
+              <button class="ghost" id="btn-import">Import accounts</button>
               <p class="hint" id="import-note">Reads the account from the token, then lists that account's claimed units from bred-api-ext and matches them by MAC.</p>
             </div>
             <div id="devices-list"></div>
