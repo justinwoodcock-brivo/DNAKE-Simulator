@@ -6,7 +6,7 @@ import './style.css';
 import { defaultConfig, ENVIRONMENTS, buildRequest, toCurl, curlScript, unresolved } from './lib/request.js';
 import { flatten, diff, formatValue } from './lib/diff.js';
 import { loadDevices, saveDevices, normalizeMac, applyImport, STATUS } from './lib/devices.js';
-import { tokenInfo, stripBearer, INTERCOMS_QUERY, DEREGISTER_MUTATION, unitsQuery } from './lib/token.js';
+import { tokenInfo, stripBearer, INTERCOMS_QUERY, DEREGISTER_MUTATION, CLEAR_TAMPER_MUTATION, TAMPER_QUERY, unitsQuery } from './lib/token.js';
 
 const STORAGE_KEY = 'dnake-simulator.config.v2';
 const inTauri = '__TAURI_INTERNALS__' in window;
@@ -145,6 +145,7 @@ function bindForm() {
       save();
       renderCurl();
       renderFlow();
+      if (el.dataset.key === 'mac' || el.dataset.key === 'adminToken') resetServerTamper();
       if (el.dataset.key === 'intervalSec' && poll.timer) {
         clearInterval(poll.timer);
         poll.timer = setInterval(checkInOnce, Math.max(1, config.intervalSec) * 1000);
@@ -309,6 +310,7 @@ async function enroll() {
       recordDevice(config.mac, {
         serialNumber: config.serialNumber.trim(),
         state: 'enrolled',
+        deviceId: '',
         enrolledAt: new Date().toISOString(),
         lastCheckInAt: null,
         settings: null,
@@ -350,6 +352,7 @@ function renderFeed() {
   $('#feed').innerHTML = poll.feed
     .map((e) => {
       if (e.error) return `<li class="bad"><time>${e.time}</time><span>${esc(e.error)}</span></li>`;
+      if (e.note) return `<li class="note"><time>${e.time}</time><span>${esc(e.note)}</span></li>`;
       if (e.pending) return `<li class="quiet"><time>${e.time}</time><span>PENDING. Waiting for the unit to be claimed</span><em>${e.ms} ms</em></li>`;
       if (e.initial) return `<li class="hit"><time>${e.time}</time><span>REGISTERED. Settings loaded (${e.count})</span><em>${e.ms} ms</em></li>`;
       if (!e.changes.length) return `<li class="quiet"><time>${e.time}</time><span>No changes</span><em>${e.ms} ms</em></li>`;
@@ -370,9 +373,10 @@ async function checkInOnce() {
   if (poll.busy) return;
   poll.busy = true;
   try {
+    const reportedTripped = config.tamperSwitchTripped;
     const res = await send(buildRequest(requestConfig(), 'checkIn'));
     if (res.status === 410) {
-      recordDevice(config.mac, { state: 'removed' });
+      recordDevice(config.mac, { state: 'removed', deviceId: '' });
       pushFeed({ error: '410. The unit is not registered. Enroll it again.' });
       setPolling(false);
       return;
@@ -407,6 +411,11 @@ async function checkInOnce() {
         renderSettings(new Set(changes.map((c) => c.path)));
       }
       poll.lastState = json.state;
+      if (json.clearTamperSwitch === true && config.tamperSwitchTripped) {
+        setTamper(false);
+        pushFeed({ note: 'The server sent clearTamperSwitch. Tamper switch reset.' });
+      }
+      if (reportedTripped || json.clearTamperSwitch) refreshServerTamper();
     }
     poll.lastState = json.state;
     renderFlow();
@@ -414,6 +423,31 @@ async function checkInOnce() {
     pushFeed({ error: `Request failed: ${err.message ?? err}` });
   } finally {
     poll.busy = false;
+  }
+}
+
+function renderTamper() {
+  const tripped = config.tamperSwitchTripped;
+  const state = $('#tamper-state');
+  state.textContent = tripped ? 'Tripped' : 'Closed';
+  state.className = `pill ${tripped ? 'bad' : 'idle'}`;
+  $('#btn-tamper').textContent = tripped ? 'Reset switch' : 'Trip tamper switch';
+}
+
+function setTamper(tripped) {
+  config.tamperSwitchTripped = tripped;
+  save();
+  renderTamper();
+  renderCurl();
+}
+
+function toggleTamper() {
+  if (config.tamperSwitchTripped) {
+    setTamper(false);
+    pushFeed({ note: 'Tamper switch reset by hand. The next check-in reports it closed.' });
+  } else {
+    setTamper(true);
+    pushFeed({ note: 'Tamper switch tripped. Every check-in reports it until the server says to clear it.' });
   }
 }
 
@@ -455,12 +489,14 @@ const randomMac = () =>
 bindForm();
 bindRows();
 renderSettings();
+renderTamper();
 renderCurl();
 renderFlow();
 
 for (const tab of document.querySelectorAll('[data-tab]')) tab.addEventListener('click', () => selectTab(tab.dataset.tab));
 $('#btn-enroll').addEventListener('click', enroll);
 $('#btn-poll').addEventListener('click', () => setPolling(!poll.timer));
+$('#btn-tamper').addEventListener('click', toggleTamper);
 $('#redact').addEventListener('change', renderCurl);
 $('#copy-curl').addEventListener('click', () => copy($('#curl-out').textContent, 'curl'));
 $('#copy-all').addEventListener('click', () => copy(curlScript(requestConfig(), { redact: $('#redact').checked }), 'Script'));
@@ -508,7 +544,7 @@ $('#devices-list').addEventListener('click', (e) => {
   if (use) {
     const device = devices.find((d) => inEnv(d) && d.mac === use);
     if (poll.timer) setPolling(false);
-    Object.assign(config, { mac: device.mac, serialNumber: device.serialNumber });
+    Object.assign(config, { mac: device.mac, serialNumber: device.serialNumber, tamperSwitchTripped: false });
     for (const key of ['mac', 'serialNumber']) $(`[data-key="${key}"]`).value = config[key];
     poll.previous = null;
     poll.lastState = null;
@@ -516,6 +552,8 @@ $('#devices-list').addEventListener('click', (e) => {
     renderCurl();
     renderFlow();
     renderSettings();
+    renderTamper();
+    resetServerTamper();
     renderDevices();
     toast('Unit loaded into the sidebar');
   }
@@ -608,6 +646,102 @@ async function deregisterUnit(mac) {
 
 $('#btn-import').addEventListener('click', importAccounts);
 
+function tamperNote(message, isError = false) {
+  const note = $('#tamper-note');
+  note.textContent = message;
+  note.classList.toggle('error', isError);
+}
+
+async function findDeviceId(mac) {
+  const known = devices.find((d) => inEnv(d) && d.mac === mac)?.deviceId;
+  if (known) return known;
+  const { data } = await gql(INTERCOMS_QUERY);
+  const unit = (data.getAccountIntercoms ?? []).find((u) => normalizeMac(u.macAddress) === mac);
+  if (!unit) return null;
+  recordDevice(mac, { state: 'registered', deviceId: String(unit.deviceId), siteId: String(unit.siteId), name: unit.name ?? '' });
+  return String(unit.deviceId);
+}
+
+async function clearTamper() {
+  const btn = $('#btn-clear-tamper');
+  const mac = normalizeMac(config.mac);
+  if (!mac) return tamperNote('Enter a MAC address first.', true);
+  btn.disabled = true;
+  tamperNote('Clearing the tamper…');
+  try {
+    const deviceId = await findDeviceId(mac);
+    if (!deviceId) {
+      tamperNote(`${mac} is not a claimed unit in the token's account.`, true);
+      return;
+    }
+    const { data } = await gql(CLEAR_TAMPER_MUTATION, { deviceId: Number(deviceId) });
+    const unit = data.clearIntercomUnitTamper;
+    if (unit) renderServerTamper(unit);
+    if (!unit?.tamperTrippedAt) {
+      tamperNote('The server has no tamper to clear. Check in once with the switch tripped first.', true);
+    } else {
+      tamperNote('Tamper cleared. The next check-in tells the unit to reset its switch.');
+      pushFeed({ note: `Admin cleared the tamper on device ${deviceId}.` });
+    }
+  } catch (err) {
+    tamperNote(`Clear tamper failed: ${err.message ?? err}`, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+$('#btn-clear-tamper').addEventListener('click', clearTamper);
+
+function renderServerTamper(unit, error) {
+  const pillEl = $('#tamper-server');
+  const at = $('#tamper-server-at');
+  if (error) {
+    pillEl.textContent = 'Unknown';
+    pillEl.className = 'pill idle';
+    at.textContent = error;
+  } else if (unit.isTampered) {
+    pillEl.textContent = 'Tampered';
+    pillEl.className = 'pill bad';
+    at.textContent = `since ${stamp(unit.tamperTrippedAt)}`;
+  } else if (unit.tamperClearedAt) {
+    pillEl.textContent = 'Cleared';
+    pillEl.className = 'pill ok';
+    at.textContent = stamp(unit.tamperClearedAt);
+  } else {
+    pillEl.textContent = 'No tamper recorded';
+    pillEl.className = 'pill idle';
+    at.textContent = '';
+  }
+}
+
+let refreshingTamper = false;
+
+async function refreshServerTamper() {
+  const mac = normalizeMac(config.mac);
+  if (!mac || !stripBearer(config.adminToken) || refreshingTamper) return;
+  refreshingTamper = true;
+  try {
+    const deviceId = await findDeviceId(mac);
+    if (!deviceId) return renderServerTamper(null, 'Not claimed in the token\'s account');
+    const { data } = await gql(TAMPER_QUERY, { deviceId: Number(deviceId) });
+    renderServerTamper(data.getIntercomUnit);
+  } catch (err) {
+    renderServerTamper(null, err.message ?? String(err));
+  } finally {
+    refreshingTamper = false;
+  }
+}
+
+function resetServerTamper() {
+  renderServerTamper(null, stripBearer(config.adminToken) ? 'Refresh to load' : 'Add an admin token to see it');
+}
+
+$('#btn-refresh-tamper').addEventListener('click', () => {
+  if (!stripBearer(config.adminToken)) return tamperNote('Add an admin token in the sidebar first.', true);
+  refreshServerTamper();
+});
+resetServerTamper();
+
 function renderEnv() {
   for (const button of document.querySelectorAll('[data-env]')) {
     button.setAttribute('aria-checked', String(button.dataset.env === config.environment));
@@ -622,7 +756,7 @@ function setEnvironment(name) {
   if (poll.timer) setPolling(false);
   save();
   config.environment = name;
-  Object.assign(config, config.envs[name]);
+  Object.assign(config, config.envs[name], { tamperSwitchTripped: false });
   poll.previous = null;
   poll.lastState = null;
   poll.feed = [];
@@ -633,6 +767,8 @@ function setEnvironment(name) {
   renderFeed();
   renderFlow();
   renderSettings();
+  renderTamper();
+  resetServerTamper();
   renderDevices();
   $('#enroll-result').innerHTML = '';
   $('#import-note').textContent = 'Reads the account from the token, then lists that account\'s claimed units from bred-api-ext and matches them by MAC.';

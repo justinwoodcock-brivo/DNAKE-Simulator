@@ -10,6 +10,8 @@ Every request sends `Authorization: Bearer <secret>`. Every unit shares one secr
 2. **Claim**: in onairplus, complete Add device for that MAC. The simulator doesn't do this.
 3. **Check in**: `POST /api/ext/intercom-unit/{mac}/check-in`. It answers `PENDING` until the unit is claimed, then `REGISTERED` with the current `settings` (today, `volume`).
 
+Every check-in also sends `tamperSwitchTripped`. **Trip tamper switch** on the Check in tab latches it to `true`, like the real switch. It stays tripped until a check-in response carries `clearTamperSwitch: true`, which bred-api-ext sends after an admin clears the tamper. **Reset switch** clears it by hand. **Clear tamper as admin** calls the `clearIntercomUnitTamper` mutation with the admin token from the sidebar, so the whole loop runs without onairplus. With an admin token, the Server row shows whether bred-api-ext has the unit as Tampered or Cleared.
+
 Check-in can start straight after enroll. A `410` means the unit was de-registered and must enroll again. A `409` on enroll means the unit is already claimed.
 
 ## Secret

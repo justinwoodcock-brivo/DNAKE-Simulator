@@ -18,6 +18,7 @@ export const defaultConfig = () => ({
   serialNumber: '',
   firmwareVersion: '',
   network: { isDhcp: '', ipAddress: '', subnetMask: '', gateway: '' },
+  tamperSwitchTripped: false,
   graphqlUrl: ENVIRONMENTS.local.graphqlUrl,
   adminToken: '',
   intervalSec: 60,
@@ -62,6 +63,8 @@ function checkInBody(config) {
   if (isDhcp === 'true' || isDhcp === 'false') network.isDhcp = isDhcp === 'true';
   for (const [key, value] of Object.entries(addresses)) if (filled(value)) network[key] = value.trim();
   if (Object.keys(network).length) body.network = network;
+  // Sent on every check-in: bred-api-ext keeps the last report when it is missing.
+  body.tamperSwitchTripped = config.tamperSwitchTripped === true;
   return body;
 }
 

@@ -31,6 +31,14 @@ export const DEREGISTER_MUTATION = `mutation ($deviceId: Int!) {
   deregisterIntercomUnit(deviceId: $deviceId) { deviceId }
 }`;
 
+export const CLEAR_TAMPER_MUTATION = `mutation ($deviceId: Int!) {
+  clearIntercomUnitTamper(deviceId: $deviceId) { deviceId isTampered tamperTrippedAt tamperClearedAt }
+}`;
+
+export const TAMPER_QUERY = `query ($deviceId: Int!) {
+  getIntercomUnit(deviceId: $deviceId) { isTampered tamperTrippedAt tamperClearedAt }
+}`;
+
 const UNIT_FIELDS =
   'deviceId volume pulseTimeSeconds hasReader doorIds serialNumber firmwareVersion lastSeen network { isDhcp ipAddress subnetMask gateway }';
 
