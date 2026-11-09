@@ -129,11 +129,14 @@
               <label class="interval">Every
                 <input type="number" min="1" data-key="intervalSec" /> s
               </label>
+              <button class="ghost" id="btn-check-in-now">Check in now</button>
               <button class="primary" id="btn-poll">Start checking in</button>
             </div>
             <div class="poll-grid">
               <div>
-                <h3>Current settings</h3>
+                <h3>Received on check-in</h3>
+                <div id="received"></div>
+                <h3 class="sub">Current settings</h3>
                 <div id="settings"></div>
                 <h3 class="sub">Tamper</h3>
                 <div class="tamper">
