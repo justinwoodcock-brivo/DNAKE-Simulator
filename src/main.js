@@ -262,7 +262,7 @@ const parseJson = (text) => {
   }
 };
 
-const poll = { timer: null, previous: null, lastState: null, feed: [], busy: false };
+const poll = { timer: null, previous: null, lastState: null, lastResponse: null, feed: [], busy: false };
 
 function setNote(id, text, state) {
   $(`#flow-${id}`).dataset.state = state;
@@ -348,6 +348,41 @@ function renderSettings(changedKeys = new Set()) {
     .join('')}</dl>`;
 }
 
+const describe = (value) => (typeof value === 'string' ? value : JSON.stringify(value));
+
+function receivedRows(response) {
+  const rows = [['State', response.state]];
+  if (response.state === 'PENDING') return rows;
+  const settings = response.settings ?? {};
+  rows.push(['Volume', settings.volume ?? '(none)']);
+  const directory = settings.directory;
+  if (directory == null) {
+    rows.push(['Directory', 'None']);
+  } else if (typeof directory === 'object') {
+    const { url, ...extras } = directory;
+    rows.push(['Directory URL', url ?? '(none)']);
+    for (const [key, value] of Object.entries(extras)) rows.push([`Directory ${key}`, describe(value)]);
+  } else {
+    rows.push(['Directory', describe(directory)]);
+  }
+  rows.push(['Settings updated', stamp(settings.settingsUpdatedAt)]);
+  rows.push(['Poll interval', response.pollIntervalSeconds == null ? '(none)' : `${response.pollIntervalSeconds} s`]);
+  rows.push(['Clear tamper switch', response.clearTamperSwitch ? 'Yes' : 'No']);
+  return rows;
+}
+
+function renderReceived() {
+  const el = $('#received');
+  if (!poll.lastResponse) {
+    el.innerHTML = '<p class="empty">Nothing yet. Start checking in to see what the server sends the unit.</p>';
+    return;
+  }
+  const rows = [...receivedRows(poll.lastResponse.json), ['Received', poll.lastResponse.time]];
+  el.innerHTML = `<dl class="settings">${rows
+    .map(([label, value]) => `<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>`)
+    .join('')}</dl>`;
+}
+
 function renderFeed() {
   $('#feed').innerHTML = poll.feed
     .map((e) => {
@@ -391,6 +426,8 @@ async function checkInOnce() {
       pushFeed({ error: `${res.status} ${res.statusText}: ${res.body.slice(0, 160)}` });
       return;
     }
+    poll.lastResponse = { json, time: time() };
+    renderReceived();
     if (json.state === 'PENDING') {
       poll.lastState = 'PENDING';
       recordDevice(config.mac, { state: 'pending', lastCheckInAt: new Date().toISOString() });
@@ -471,6 +508,15 @@ function setPolling(on) {
   renderFlow();
 }
 
+function checkInNow() {
+  const issue = problems(buildRequest(requestConfig(), 'checkIn'));
+  if (issue) {
+    pushFeed({ error: issue });
+    return;
+  }
+  checkInOnce();
+}
+
 function selectTab(name) {
   activeTab = name;
   for (const tab of document.querySelectorAll('[data-tab]')) tab.setAttribute('aria-selected', String(tab.dataset.tab === name));
@@ -488,6 +534,7 @@ const randomMac = () =>
 
 bindForm();
 bindRows();
+renderReceived();
 renderSettings();
 renderTamper();
 renderCurl();
@@ -496,6 +543,7 @@ renderFlow();
 for (const tab of document.querySelectorAll('[data-tab]')) tab.addEventListener('click', () => selectTab(tab.dataset.tab));
 $('#btn-enroll').addEventListener('click', enroll);
 $('#btn-poll').addEventListener('click', () => setPolling(!poll.timer));
+$('#btn-check-in-now').addEventListener('click', checkInNow);
 $('#btn-tamper').addEventListener('click', toggleTamper);
 $('#redact').addEventListener('change', renderCurl);
 $('#copy-curl').addEventListener('click', () => copy($('#curl-out').textContent, 'curl'));
@@ -548,9 +596,11 @@ $('#devices-list').addEventListener('click', (e) => {
     for (const key of ['mac', 'serialNumber']) $(`[data-key="${key}"]`).value = config[key];
     poll.previous = null;
     poll.lastState = null;
+    poll.lastResponse = null;
     save();
     renderCurl();
     renderFlow();
+    renderReceived();
     renderSettings();
     renderTamper();
     resetServerTamper();
@@ -759,6 +809,7 @@ function setEnvironment(name) {
   Object.assign(config, config.envs[name], { tamperSwitchTripped: false });
   poll.previous = null;
   poll.lastState = null;
+  poll.lastResponse = null;
   poll.feed = [];
   for (const key of ['baseUrl', 'secret', 'graphqlUrl', 'adminToken']) $(`[data-key="${key}"]`).value = config[key];
   save();
@@ -766,6 +817,7 @@ function setEnvironment(name) {
   renderCurl();
   renderFeed();
   renderFlow();
+  renderReceived();
   renderSettings();
   renderTamper();
   resetServerTamper();

@@ -123,7 +123,7 @@ button:disabled { opacity: 0.55; cursor: progress; }
 .settings > div { display: flex; justify-content: space-between; gap: 16px; padding: 9px 16px; border-top: 1px solid var(--line); }
 .settings > div:first-child { border-top: 0; }
 .settings dt { color: var(--muted); font-family: var(--mono); font-size: 12.5px; }
-.settings dd { margin: 0; font-size: 13px; font-weight: 400; text-align: right; }
+.settings dd { margin: 0; font-size: 13px; font-weight: 400; text-align: right; overflow-wrap: anywhere; }
 .settings .changed { animation: flash 2.4s ease-out; }
 .settings .changed dd { color: var(--flash); font-weight: 600; }
 @keyframes flash { from { background: var(--flash-bg); } to { background: transparent; } }
